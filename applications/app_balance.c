@@ -102,6 +102,7 @@ static float motor_current;
 static float motor_position;
 static float adc1, adc2;
 static SwitchState switch_state;
+static uint32_t imu_data_version = -1;
 
 // Rumtime state values
 static BalanceState state;
@@ -625,7 +626,14 @@ static THD_FUNCTION(balance_thread, arg) {
 		motor_position = mc_interface_get_pid_pos_now();
 
 		// Get the values we want
-		last_pitch_angle = pitch_angle;
+		uint32_t current_imu_data_version = imu_get_data_version();
+		if (imu_data_version != current_imu_data_version) {
+			imu_data_version = current_imu_data_version;
+
+			// Update last pitch angle only if we got new data, ignore otherwise.
+			// This is important for D input calculation, otherwise we get 0.
+			last_pitch_angle = pitch_angle;
+		}
 		pitch_angle = RAD2DEG_f(imu_get_pitch());
 		roll_angle = RAD2DEG_f(imu_get_roll());
 		abs_roll_angle = fabsf(roll_angle);
@@ -712,6 +720,8 @@ static THD_FUNCTION(balance_thread, arg) {
 				proportional = apply_deadzone(proportional);
 				// Resume real PID maths
 				integral = integral + proportional;
+
+				// TODO: derivative is supposed to scale by dt (loop time). Othewise reducing loop time one also reduces D param proportionally.
 				derivative = last_pitch_angle - pitch_angle;
 
 				// Apply D term filters

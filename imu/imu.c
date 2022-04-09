@@ -45,6 +45,7 @@ static BMI_STATE m_bmi_state;
 static imu_config m_settings;
 static systime_t init_time;
 static bool imu_ready;
+static uint32_t data_version = 0;
 
 // Private functions
 static void imu_read_callback(float *accel, float *gyro, float *mag);
@@ -404,6 +405,10 @@ void imu_get_calibration(float yaw, float *imu_cal) {
 	FusionAhrsReinitialise(&m_fusionAhrs);
 }
 
+uint32_t imu_get_data_version(void) {
+	return data_version;
+}
+
 static void imu_read_callback(float *accel, float *gyro, float *mag) {
 	static uint32_t last_time = 0;
 
@@ -504,6 +509,8 @@ static void imu_read_callback(float *accel, float *gyro, float *mag) {
 			m_att.q3 = m_fusionAhrs.quaternion.element.z;
 		} break;
 	}
+
+	data_version++;
 }
 
 void rotate(float *input, float *rotation, float *output) {

@@ -34,7 +34,7 @@
 #include <stdio.h>
 
 // Settings
-#define USE_MAGNETOMETER		1
+#define USE_MAGNETOMETER		0
 #define MPU_I2C_TIMEOUT			10
 #define MAG_DIV 				10
 #define FAIL_DELAY_US			1000
@@ -421,7 +421,7 @@ static int reset_init_mpu(void) {
 
 	// Set low pass filter to 256Hz (1ms delay)
 	tx_buf[0] = MPU9150_CONFIG;
-	tx_buf[1] = MPU9150_DLPF_BW_256;
+	tx_buf[1] = MPU9150_DLPF_BW_98;
 	res = i2c_bb_tx_rx(&i2cs, mpu_addr, tx_buf, 2, rx_buf, 0);
 
 	if (!res) {

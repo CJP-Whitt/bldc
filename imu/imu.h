@@ -20,6 +20,8 @@
 #ifndef IMU_IMU_H_
 #define IMU_IMU_H_
 
+#include <stdint.h>
+
 #include "ch.h"
 #include "hal.h"
 #include "i2c_bb.h"
@@ -53,5 +55,7 @@ void imu_get_mag(float *mag);
 void imu_get_accel_derotated(float *accel);
 void imu_get_quaternions(float *q);
 void imu_get_calibration(float yaw, float * imu_cal);
+
+uint32_t imu_get_data_version(void);
 
 #endif /* IMU_IMU_H_ */
