@@ -421,7 +421,7 @@ static int reset_init_mpu(void) {
 
 	// Set low pass filter to 256Hz (1ms delay)
 	tx_buf[0] = MPU9150_CONFIG;
-	tx_buf[1] = MPU9150_DLPF_BW_98;
+	tx_buf[1] = MPU9150_DLPF_BW_256;
 	res = i2c_bb_tx_rx(&i2cs, mpu_addr, tx_buf, 2, rx_buf, 0);
 
 	if (!res) {
