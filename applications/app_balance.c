@@ -138,6 +138,10 @@ static float app_balance_get_debug(int index);
 static void app_balance_sample_debug(void);
 static void app_balance_experiment(void);
 
+
+static uint32_t skipped_updates;
+static uint32_t good_updates;
+
 // Utility Functions
 float biquad_process(Biquad *biquad, float in) {
     float out = in * biquad->a0 + biquad->z1;
@@ -633,6 +637,10 @@ static THD_FUNCTION(balance_thread, arg) {
 			// Update last pitch angle only if we got new data, ignore otherwise.
 			// This is important for D input calculation, otherwise we get 0.
 			last_pitch_angle = pitch_angle;
+			good_updates++;
+		}
+		else {
+			skipped_updates++;
 		}
 		pitch_angle = RAD2DEG_f(imu_get_pitch());
 		roll_angle = RAD2DEG_f(imu_get_roll());
@@ -740,7 +748,9 @@ static THD_FUNCTION(balance_thread, arg) {
 					derivative = biquad_process(&d_biquad_highpass, derivative);
 				}
 
-				pid_value = (balance_conf.kp * proportional) + (balance_conf.ki * integral) + (balance_conf.kd * derivative);
+				float angle_pid_value = (balance_conf.kp * proportional) + (balance_conf.ki * integral); //  + (balance_conf.kd * derivative); balance_conf.kd is hijacked for rate pid p.
+				float rate_pid_value =  balance_conf.kd * (angle_pid_value - gyro[1]);
+				pid_value = rate_pid_value;
 
 				last_proportional = proportional;
 
@@ -841,6 +851,10 @@ static void terminal_render(int argc, const char **argv) {
 }
 
 static void terminal_sample(int argc, const char **argv) {
+	commands_printf("skipped_updates: %d\ngood_updates: %d\n", skipped_updates, good_updates);
+	skipped_updates = 0;
+	good_updates = 0;
+
 	if (argc == 3) {
 		debug_sample_field = 0;
 		debug_sample_count = 0;
