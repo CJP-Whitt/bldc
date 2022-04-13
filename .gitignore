@@ -1,5 +1,6 @@
 *~
 
+
 build
 .dep
 .project
@@ -7,3 +8,7 @@ build
 .settings/language.settings.xml
 .DS_Store
 workspace.code-workspace
+.vscode/dryrun.log
+.vscode/settings.json
+.vscode/configurationCache.log
+.vscode/targets.log
