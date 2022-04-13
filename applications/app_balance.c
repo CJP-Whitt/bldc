@@ -78,6 +78,16 @@ typedef enum {
 	BQ_HIGHPASS
 } BiquadType;
 
+// typedef enum {
+// 	NONE = 0,
+// 	CONSTANT = 1,
+// 	LINEAR = 2,
+// 	QUADRATIC = 3,
+// 	EXPONENTIAL = 4,
+// 	LOGARITHMIC = 5,
+// 	TAN = 6
+// } CpcFunctionType;
+
 // Balance thread
 static THD_FUNCTION(balance_thread, arg);
 static THD_WORKING_AREA(balance_thread_wa, 2048); // 2kb stack for this thread
@@ -122,6 +132,9 @@ static float d_pt1_lowpass_state, d_pt1_lowpass_k, d_pt1_highpass_state, d_pt1_h
 static Biquad d_biquad_lowpass, d_biquad_highpass;
 static float motor_timeout;
 static systime_t brake_timeout;
+static float pitch_angle_cpc, last_pitch_angle_cpc; 				// Custom-Pitch_Control Values
+// TODO: static float last_motor_current, motor_smoothing_alpha;   	// Motor smoothing Values
+
 
 // Debug values
 static int debug_render_1, debug_render_2;
@@ -502,6 +515,31 @@ static void apply_torquetilt(void){
 	setpoint += torquetilt_interpolated;
 }
 
+// TODO: Add asymmetrical braking, add stationary stiffness
+static void apply_cpc(void){
+	// Custom Pitch Control
+	// - Scale current measured imu pitch based on function plot type, and a target scale @ angle
+	// Params:
+	// - yaw_kp = mapping function { any else=Off, 1=Constant, 2=Linear, 3=Parabolic }
+	// - yaw_ki = Stiffness scale target @ Stiffness angle application { range: [0,1] *percent normalized }
+	// - yaw_kd = Stiffness angle application { range: [0,90] *degrees }
+
+	switch((int) balance_conf.yaw_kp){
+		case 1: // Constant
+			pitch_angle_cpc = pitch_angle * (balance_conf.yaw_ki);
+			break;
+		case 2: // Linear
+			pitch_angle_cpc = pitch_angle * fabsf( (balance_conf.yaw_ki / balance_conf.yaw_kd) * pitch_angle );
+			break;
+		case 3: // Parabolic
+			pitch_angle_cpc = pitch_angle * fabsf( (balance_conf.yaw_ki / powf(balance_conf.yaw_kd, 2) ) * powf(pitch_angle, 2) );
+			break;
+		default:
+			pitch_angle_cpc = pitch_angle;
+	}
+	
+}
+
 static void apply_turntilt(void){
 	// Calculate desired angle
 	turntilt_target = abs_roll_angle_sin * balance_conf.turntilt_strength;
@@ -626,7 +664,9 @@ static THD_FUNCTION(balance_thread, arg) {
 
 		// Get the values we want
 		last_pitch_angle = pitch_angle;
+		last_pitch_angle_cpc = pitch_angle_cpc;
 		pitch_angle = RAD2DEG_f(imu_get_pitch());
+		apply_cpc();
 		roll_angle = RAD2DEG_f(imu_get_roll());
 		abs_roll_angle = fabsf(roll_angle);
 		abs_roll_angle_sin = sinf(DEG2RAD_f(abs_roll_angle));
@@ -705,14 +745,15 @@ static THD_FUNCTION(balance_thread, arg) {
 				apply_noseangling();
 				apply_torquetilt();
 				apply_turntilt();
+				apply_cpc();
 
 				// Do PID maths
-				proportional = setpoint - pitch_angle;
+				proportional = setpoint - pitch_angle_cpc; // proportional = setpoint - pitch_angle;
 				// Apply deadzone
 				proportional = apply_deadzone(proportional);
 				// Resume real PID maths
 				integral = integral + proportional;
-				derivative = last_pitch_angle - pitch_angle;
+				derivative = last_pitch_angle_cpc - pitch_angle_cpc; // derivative = last_pitch_angle - pitch_angle;
 
 				// Apply D term filters
 				if(balance_conf.kd_pt1_lowpass_frequency > 0){
