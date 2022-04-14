@@ -523,16 +523,20 @@ static void apply_cpc(void){
 	// - yaw_kp = mapping function { any else=Off, 1=Constant, 2=Linear, 3=Parabolic }
 	// - yaw_ki = Stiffness scale target @ Stiffness angle application { range: [0,1] *percent normalized }
 	// - yaw_kd = Stiffness angle application { range: [0,90] *degrees }
-
+	// - roll_steer_kp = Stiffness scale target @ zero angle application {range: [0,1] *percent normalized }
+	if (balance_conf.yaw_ki < balance_conf.roll_steer_kp){
+		pitch_angle_cpc = pitch_angle;
+		return;
+	}
 	switch((int) balance_conf.yaw_kp){
 		case 1: // Constant
 			pitch_angle_cpc = pitch_angle * (balance_conf.yaw_ki);
 			break;
 		case 2: // Linear
-			pitch_angle_cpc = pitch_angle * fabsf( (balance_conf.yaw_ki / balance_conf.yaw_kd) * pitch_angle );
+			pitch_angle_cpc = pitch_angle * fabsf( ( (balance_conf.yaw_ki - balance_conf.roll_steer_kp) / balance_conf.yaw_kd) * pitch_angle + balance_conf.roll_steer_kp);
 			break;
 		case 3: // Parabolic
-			pitch_angle_cpc = pitch_angle * fabsf( (balance_conf.yaw_ki / powf(balance_conf.yaw_kd, 2) ) * powf(pitch_angle, 2) );
+			pitch_angle_cpc = pitch_angle * fabsf( ( (balance_conf.yaw_ki - balance_conf.roll_steer_kp) / powf(balance_conf.yaw_kd, 2) ) * powf(pitch_angle, 2) + balance_conf.roll_steer_kp);
 			break;
 		default:
 			pitch_angle_cpc = pitch_angle;
