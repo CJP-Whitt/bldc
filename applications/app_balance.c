@@ -533,10 +533,10 @@ static void apply_cpc(void){
 			pitch_angle_cpc = pitch_angle * (balance_conf.yaw_ki);
 			break;
 		case 2: // Linear
-			pitch_angle_cpc = pitch_angle * fabsf( ( (balance_conf.yaw_ki - balance_conf.roll_steer_kp) / balance_conf.yaw_kd) * pitch_angle + balance_conf.roll_steer_kp);
+			pitch_angle_cpc = pitch_angle * ( fabsf( ( (balance_conf.yaw_ki - balance_conf.roll_steer_kp) / balance_conf.yaw_kd) * pitch_angle) + balance_conf.roll_steer_kp );
 			break;
 		case 3: // Parabolic
-			pitch_angle_cpc = pitch_angle * fabsf( ( (balance_conf.yaw_ki - balance_conf.roll_steer_kp) / powf(balance_conf.yaw_kd, 2) ) * powf(pitch_angle, 2) + balance_conf.roll_steer_kp);
+			pitch_angle_cpc = pitch_angle * ( fabsf( ( (balance_conf.yaw_ki - balance_conf.roll_steer_kp) / powf(balance_conf.yaw_kd, 2) ) * powf(pitch_angle, 2)) + balance_conf.roll_steer_kp );
 			break;
 		default:
 			pitch_angle_cpc = pitch_angle;
