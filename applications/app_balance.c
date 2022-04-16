@@ -133,7 +133,6 @@ static Biquad d_biquad_lowpass, d_biquad_highpass;
 static float motor_timeout;
 static systime_t brake_timeout;
 static float pitch_angle_cpc, last_pitch_angle_cpc; 				// Custom-Pitch_Control Values
-// TODO: static float last_motor_current, motor_smoothing_alpha;   	// Motor smoothing Values
 
 
 // Debug values
