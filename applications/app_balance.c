@@ -95,7 +95,7 @@ static float tiltback_variable, tiltback_variable_max_erpm, noseangling_step_siz
 
 // Runtime values read from elsewhere
 static float pitch_angle, last_pitch_angle, roll_angle, abs_roll_angle, abs_roll_angle_sin;
-static float gyro[3];
+static float gyro[3], pitch_rate, last_pitch_rate;
 static float duty_cycle, abs_duty_cycle;
 static float erpm, abs_erpm, avg_erpm;
 static float motor_current;
@@ -106,7 +106,7 @@ static uint32_t imu_data_version = -1;
 
 // Rumtime state values
 static BalanceState state;
-static float proportional, integral, derivative;
+static float proportional, integral, derivative, proportional_rate, integral_rate, derivative_rate;
 static float last_proportional, abs_proportional;
 static float pid_value;
 static float setpoint, setpoint_target, setpoint_target_interpolated;
@@ -301,6 +301,7 @@ float app_balance_get_debug2(void) {
 static void reset_vars(void){
 	// Clear accumulated values.
 	integral = 0;
+	integral_rate = 0;
 	last_proportional = 0;
 	yaw_integral = 0;
 	yaw_last_proportional = 0;
@@ -736,7 +737,8 @@ static THD_FUNCTION(balance_thread, arg) {
 				if(balance_conf.kd_pt1_lowpass_frequency > 0){
 					d_pt1_lowpass_state = d_pt1_lowpass_state + d_pt1_lowpass_k * (derivative - d_pt1_lowpass_state);
 					derivative = d_pt1_lowpass_state;
-				}
+				} d_pt1_lowpass_k * (derivative - d_pt1_lowpass_state);
+					derivative = d_pt1_lowpass_state;
 				if(balance_conf.kd_pt1_highpass_frequency > 0){
 					d_pt1_highpass_state = d_pt1_highpass_state + d_pt1_highpass_k * (derivative - d_pt1_highpass_state);
 					derivative = derivative - d_pt1_highpass_state;
@@ -748,8 +750,14 @@ static THD_FUNCTION(balance_thread, arg) {
 					derivative = biquad_process(&d_biquad_highpass, derivative);
 				}
 
-				float angle_pid_value = (balance_conf.kp * proportional) + (balance_conf.ki * integral); //  + (balance_conf.kd * derivative); balance_conf.kd is hijacked for rate pid p.
-				float rate_pid_value =  balance_conf.kd * (angle_pid_value - gyro[1]);
+				// Primary PID - pitch angle based
+				float angle_pid_value = (balance_conf.kp * proportional) + (balance_conf.ki * integral) + (balance_conf.kd * derivative);
+				
+				// Secondary PID - pitch rate based
+				proportional_rate = angle_pid_value - gyro[1];
+				integral_rate = integral_rate + proportional_rate;
+				derivative_rate = last_pitch_rate - gyro[1];
+				float rate_pid_value =  (balance_conf.yaw_kp * proportional_rate) + (balance_conf.yaw_ki * integral_rate) + (balance_conf.yaw_kd * derivative_rate);
 				pid_value = rate_pid_value;
 
 				last_proportional = proportional;
