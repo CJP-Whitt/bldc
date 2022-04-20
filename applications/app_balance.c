@@ -120,6 +120,7 @@ static systime_t current_time, last_time, diff_time, loop_overshoot;
 static float filtered_loop_overshoot, loop_overshoot_alpha, filtered_diff_time;
 static systime_t fault_angle_pitch_timer, fault_angle_roll_timer, fault_switch_timer, fault_switch_half_timer, fault_duty_timer;
 static float d_pt1_lowpass_state, d_pt1_lowpass_k, d_pt1_highpass_state, d_pt1_highpass_k;
+static float d_pt1_lowpass_state2, d_pt1_lowpass_k2, d_pt1_highpass_state2, d_pt1_highpass_k2;
 static Biquad d_biquad_lowpass, d_biquad_highpass;
 static float motor_timeout;
 static systime_t brake_timeout;
@@ -198,6 +199,11 @@ void app_balance_configure(balance_config *conf, imu_config *conf2) {
 		float dT = 1.0 / balance_conf.hertz;
 		float RC = 1.0 / ( 2.0 * M_PI * balance_conf.kd_pt1_lowpass_frequency);
 		d_pt1_lowpass_k =  dT / (RC + dT);
+	}
+	if(balance_conf.roll_steer_kp > 0){
+		float dT = 1.0 / balance_conf.hertz;
+		float RC = 1.0 / ( 2.0 * M_PI * balance_conf.roll_steer_kp);
+		d_pt1_lowpass_k2 =  dT / (RC + dT);
 	}
 	if(balance_conf.kd_pt1_highpass_frequency > 0){
 		float dT = 1.0 / balance_conf.hertz;
@@ -306,7 +312,9 @@ static void reset_vars(void){
 	yaw_integral = 0;
 	yaw_last_proportional = 0;
 	d_pt1_lowpass_state = 0;
+	d_pt1_lowpass_state2 = 0;
 	d_pt1_highpass_state = 0;
+	d_pt1_highpass_state2 = 0;
 	biquad_reset(&d_biquad_lowpass);
 	biquad_reset(&d_biquad_highpass);
 	// Set values for startup
@@ -737,8 +745,7 @@ static THD_FUNCTION(balance_thread, arg) {
 				if(balance_conf.kd_pt1_lowpass_frequency > 0){
 					d_pt1_lowpass_state = d_pt1_lowpass_state + d_pt1_lowpass_k * (derivative - d_pt1_lowpass_state);
 					derivative = d_pt1_lowpass_state;
-				} d_pt1_lowpass_k * (derivative - d_pt1_lowpass_state);
-					derivative = d_pt1_lowpass_state;
+				}
 				if(balance_conf.kd_pt1_highpass_frequency > 0){
 					d_pt1_highpass_state = d_pt1_highpass_state + d_pt1_highpass_k * (derivative - d_pt1_highpass_state);
 					derivative = derivative - d_pt1_highpass_state;
@@ -757,9 +764,14 @@ static THD_FUNCTION(balance_thread, arg) {
 				proportional_rate = angle_pid_value - gyro[1];
 				integral_rate = integral_rate + proportional_rate;
 				derivative_rate = last_pitch_rate - gyro[1];
+				// Apply D term filters
+				if(balance_conf.roll_steer_kp > 0){
+					d_pt1_lowpass_state2 = d_pt1_lowpass_state2 + d_pt1_lowpass_k2 * (derivative_rate - d_pt1_lowpass_state2);
+					derivative_rate = d_pt1_lowpass_state2;
+				}
 				float rate_pid_value =  (balance_conf.yaw_kp * proportional_rate) + (balance_conf.yaw_ki * integral_rate) + (balance_conf.yaw_kd * derivative_rate);
 				pid_value = rate_pid_value;
-
+ 
 				last_proportional = proportional;
 
 				// Apply Booster
