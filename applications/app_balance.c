@@ -760,10 +760,16 @@ static THD_FUNCTION(balance_thread, arg) {
 				// Primary PID - pitch angle based
 				float angle_pid_value = (balance_conf.kp * proportional) + (balance_conf.ki * integral) + (balance_conf.kd * derivative);
 				
-				// Secondary PID - pitch rate based
-				proportional_rate = angle_pid_value - gyro[1];
+				//***Secondary PID - pitch rate based***
+				if(balance_conf.yaw_current_clamp > 0){ // Use reverse rate 
+					pitch_rate = -gyro[1];
+				} else{
+					pitch_rate = gyro[1];
+				}
+				// PID Maths
+				proportional_rate = angle_pid_value - pitch_rate;
 				integral_rate = integral_rate + proportional_rate;
-				derivative_rate = last_pitch_rate - gyro[1];
+				derivative_rate = last_pitch_rate - pitch_rate;
 				// Apply D term filters
 				if(balance_conf.roll_steer_kp > 0){
 					d_pt1_lowpass_state2 = d_pt1_lowpass_state2 + d_pt1_lowpass_k2 * (derivative_rate - d_pt1_lowpass_state2);
