@@ -72,10 +72,10 @@
 // Mark3 version of HW60 with power switch and separate NRF UART.
 //#define HW60_IS_MK3
 //#define HW60_IS_MK4
-#define HW60_IS_MK5
+// #define HW60_IS_MK5
 
-#define HW_SOURCE "hw_60.c"
-#define HW_HEADER "hw_60.h"
+// #define HW_SOURCE "hw_60.c"
+// #define HW_HEADER "hw_60.h"
 
 //#define HW_SOURCE "hw_r2.c"
 //#define HW_HEADER "hw_r2.h"
@@ -103,7 +103,7 @@
 
 // Second revision with separate UART for NRF51
 //#define HW75_300_REV_2
-#define HW75_300_REV_3
+// #define HW75_300_REV_3
 
 //#define HW_SOURCE "hw_75_300.c"
 //#define HW_HEADER "hw_75_300.h"
@@ -178,8 +178,8 @@
 //#define HW_SOURCE "hw_warrior6.c"
 //#define HW_HEADER "hw_warrior6.h"
 
-//#define HW_SOURCE "hw_raiden7.c"
-//#define HW_HEADER "hw_raiden7.h"
+#define HW_SOURCE "hw_raiden7.c"
+#define HW_HEADER "hw_raiden7.h"
 
 //#define HW_SOURCE "hw_ubox_single.c"
 //#define HW_HEADER "hw_ubox_single.h"
