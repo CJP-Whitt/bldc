@@ -743,10 +743,8 @@ static THD_FUNCTION(balance_thread, arg) {
 
 				// Do PID maths
 				proportional = setpoint - pitch_angle;
-				// Apply deadzone
 				// Resume real PID maths
 				integral = integral + proportional;
-
 				// TODO: derivative is supposed to scale by dt (loop time). Othewise reducing loop time one also reduces D param proportionally.
 				derivative = last_pitch_angle - pitch_angle;
 
@@ -754,16 +752,6 @@ static THD_FUNCTION(balance_thread, arg) {
 				if(balance_conf.kd_pt1_lowpass_frequency > 0){
 					d_pt1_lowpass_state = d_pt1_lowpass_state + d_pt1_lowpass_k * (derivative - d_pt1_lowpass_state);
 					derivative = d_pt1_lowpass_state;
-				}
-				if(balance_conf.kd_pt1_highpass_frequency > 0){
-					d_pt1_highpass_state = d_pt1_highpass_state + d_pt1_highpass_k * (derivative - d_pt1_highpass_state);
-					derivative = derivative - d_pt1_highpass_state;
-				}
-				if(balance_conf.kd_biquad_lowpass > 0){
-					derivative = biquad_process(&d_biquad_lowpass, derivative);
-				}
-				if(balance_conf.kd_biquad_highpass > 0){
-					derivative = biquad_process(&d_biquad_highpass, derivative);
 				}
 
 				// Primary PID - pitch angle based
