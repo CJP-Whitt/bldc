@@ -95,9 +95,9 @@ static float tiltback_variable, tiltback_variable_max_erpm, noseangling_step_siz
 
 // Runtime values read from elsewhere
 static float pitch_angle, last_pitch_angle, roll_angle, abs_roll_angle, abs_roll_angle_sin;
-static float gyro[3], pitch_rate, last_pitch_rate;
+static float gyro[3];
 static float duty_cycle, abs_duty_cycle;
-static float erpm, abs_erpm, avg_erpm;
+static float erpm, abs_erpm, avg_erpm, vel_erpm, last_vel_erpm;
 static float motor_current;
 static float motor_position;
 static float adc1, adc2;
@@ -106,7 +106,7 @@ static uint32_t imu_data_version = -1;
 
 // Rumtime state values
 static BalanceState state;
-static float proportional, integral, derivative, proportional_rate, integral_rate, derivative_rate;
+static float proportional, integral, derivative, proportional_erpm, integral_erpm, derivative_erpm;
 static float last_proportional, abs_proportional;
 static float pid_value;
 static float setpoint, setpoint_target, setpoint_target_interpolated;
@@ -120,7 +120,8 @@ static systime_t current_time, last_time, diff_time, loop_overshoot;
 static float filtered_loop_overshoot, loop_overshoot_alpha, filtered_diff_time;
 static systime_t fault_angle_pitch_timer, fault_angle_roll_timer, fault_switch_timer, fault_switch_half_timer, fault_duty_timer;
 static float d_pt1_lowpass_state, d_pt1_lowpass_k, d_pt1_highpass_state, d_pt1_highpass_k;
-static float d_pt1_lowpass_state2, d_pt1_lowpass_k2, d_pt1_highpass_state2, d_pt1_highpass_k2;
+static float d_pt1_lowpass_state2, d_pt1_lowpass_k2; // For ERPM PID loop
+static float p_pt1_lowpass_state2, p_pt1_lowpass_k2; // For ERPM PID loop
 static Biquad d_biquad_lowpass, d_biquad_highpass;
 static float motor_timeout;
 static systime_t brake_timeout;
@@ -203,6 +204,11 @@ void app_balance_configure(balance_config *conf, imu_config *conf2) {
 	if(balance_conf.roll_steer_kp > 0){
 		float dT = 1.0 / balance_conf.hertz;
 		float RC = 1.0 / ( 2.0 * M_PI * balance_conf.roll_steer_kp);
+		p_pt1_lowpass_k2 =  dT / (RC + dT);
+	}
+	if(balance_conf.roll_steer_erpm_kp > 0){
+		float dT = 1.0 / balance_conf.hertz;
+		float RC = 1.0 / ( 2.0 * M_PI * balance_conf.roll_steer_erpm_kp);
 		d_pt1_lowpass_k2 =  dT / (RC + dT);
 	}
 	if(balance_conf.kd_pt1_highpass_frequency > 0){
@@ -306,15 +312,17 @@ float app_balance_get_debug2(void) {
 // Internal Functions
 static void reset_vars(void){
 	// Clear accumulated values.
+	erpm = 0;
 	integral = 0;
-	integral_rate = 0;
+	integral_erpm = 0;
 	last_proportional = 0;
 	yaw_integral = 0;
 	yaw_last_proportional = 0;
 	d_pt1_lowpass_state = 0;
-	d_pt1_lowpass_state2 = 0;
 	d_pt1_highpass_state = 0;
-	d_pt1_highpass_state2 = 0;
+	d_pt1_lowpass_state2 = 0;
+	p_pt1_lowpass_state2 = 0;
+	d_pt1_highpass_state = 0;
 	biquad_reset(&d_biquad_lowpass);
 	biquad_reset(&d_biquad_highpass);
 	// Set values for startup
@@ -658,7 +666,9 @@ static THD_FUNCTION(balance_thread, arg) {
 		imu_get_gyro(gyro);
 		duty_cycle = mc_interface_get_duty_cycle_now();
 		abs_duty_cycle = fabsf(duty_cycle);
+		last_vel_erpm = erpm;
 		erpm = mc_interface_get_rpm();
+		vel_erpm = erpm;
 		abs_erpm = fabsf(erpm);
 		if(balance_conf.multi_esc){
 			avg_erpm = erpm;
@@ -734,7 +744,6 @@ static THD_FUNCTION(balance_thread, arg) {
 				// Do PID maths
 				proportional = setpoint - pitch_angle;
 				// Apply deadzone
-				proportional = apply_deadzone(proportional);
 				// Resume real PID maths
 				integral = integral + proportional;
 
@@ -760,23 +769,28 @@ static THD_FUNCTION(balance_thread, arg) {
 				// Primary PID - pitch angle based
 				float angle_pid_value = (balance_conf.kp * proportional) + (balance_conf.ki * integral) + (balance_conf.kd * derivative);
 				
-				//***Secondary PID - pitch rate based***
-				if(balance_conf.yaw_current_clamp > 0){ // Use reverse rate 
-					pitch_rate = -gyro[1];
+				//***Secondary PID - erpm based***
+				if(balance_conf.yaw_current_clamp > 0){ // Use reverse erpm
+					vel_erpm = -erpm;
 				} else{
-					pitch_rate = gyro[1];
+					vel_erpm = erpm;
 				}
 				// PID Maths
-				proportional_rate = angle_pid_value - pitch_rate;
-				integral_rate = integral_rate + proportional_rate;
-				derivative_rate = last_pitch_rate - pitch_rate;
-				// Apply D term filters
+				proportional_erpm = angle_pid_value - vel_erpm;
+				integral_erpm = integral_erpm + proportional_erpm;
+				derivative_erpm = last_vel_erpm - vel_erpm;
+				// Apply P term filters
 				if(balance_conf.roll_steer_kp > 0){
-					d_pt1_lowpass_state2 = d_pt1_lowpass_state2 + d_pt1_lowpass_k2 * (derivative_rate - d_pt1_lowpass_state2);
-					derivative_rate = d_pt1_lowpass_state2;
+					p_pt1_lowpass_state2 = p_pt1_lowpass_state2 + p_pt1_lowpass_k2 * (proportional_erpm - p_pt1_lowpass_state2);
+					proportional_erpm = p_pt1_lowpass_state2;
 				}
-				float rate_pid_value =  (balance_conf.yaw_kp * proportional_rate) + (balance_conf.yaw_ki * integral_rate) + (balance_conf.yaw_kd * derivative_rate);
-				pid_value = rate_pid_value;
+				// Apply D term filters
+				if(balance_conf.roll_steer_erpm_kp > 0){
+					d_pt1_lowpass_state2 = d_pt1_lowpass_state2 + d_pt1_lowpass_k2 * (derivative_erpm - d_pt1_lowpass_state2);
+					derivative_erpm = d_pt1_lowpass_state2;
+				}
+				float erpm_pid_value =  (balance_conf.yaw_kp * proportional_erpm) + (balance_conf.yaw_ki * integral_erpm) + (balance_conf.yaw_kd * derivative_erpm);
+				pid_value = erpm_pid_value;
  
 				last_proportional = proportional;
 
