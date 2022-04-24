@@ -106,7 +106,7 @@ static uint32_t imu_data_version = -1;
 
 // Rumtime state values
 static BalanceState state;
-static float proportional, integral, derivative, proportional_erpm, integral_erpm, derivative_erpm;
+static float proportional, integral, derivative;
 static float last_proportional, abs_proportional;
 static float pid_value;
 static float setpoint, setpoint_target, setpoint_target_interpolated;
@@ -308,7 +308,6 @@ static void reset_vars(void){
 	// Clear accumulated values.
 	erpm = 0;
 	integral = 0;
-	integral_erpm = 0;
 	last_proportional = 0;
 	yaw_integral = 0;
 	yaw_last_proportional = 0;
