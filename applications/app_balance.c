@@ -120,8 +120,7 @@ static systime_t current_time, last_time, diff_time, loop_overshoot;
 static float filtered_loop_overshoot, loop_overshoot_alpha, filtered_diff_time;
 static systime_t fault_angle_pitch_timer, fault_angle_roll_timer, fault_switch_timer, fault_switch_half_timer, fault_duty_timer;
 static float d_pt1_lowpass_state, d_pt1_lowpass_k, d_pt1_highpass_state, d_pt1_highpass_k;
-static float d_pt1_lowpass_state2, d_pt1_lowpass_k2; // For ERPM PID loop
-static float p_pt1_lowpass_state2, p_pt1_lowpass_k2; // For ERPM PID loop
+static float erpm_pt1_lowpass_state, erpm_pt1_lowpass_k; // For ERPM scaling
 static Biquad d_biquad_lowpass, d_biquad_highpass;
 static float motor_timeout;
 static systime_t brake_timeout;
@@ -204,12 +203,7 @@ void app_balance_configure(balance_config *conf, imu_config *conf2) {
 	if(balance_conf.roll_steer_kp > 0){
 		float dT = 1.0 / balance_conf.hertz;
 		float RC = 1.0 / ( 2.0 * M_PI * balance_conf.roll_steer_kp);
-		p_pt1_lowpass_k2 =  dT / (RC + dT);
-	}
-	if(balance_conf.roll_steer_erpm_kp > 0){
-		float dT = 1.0 / balance_conf.hertz;
-		float RC = 1.0 / ( 2.0 * M_PI * balance_conf.roll_steer_erpm_kp);
-		d_pt1_lowpass_k2 =  dT / (RC + dT);
+		erpm_pt1_lowpass_k =  dT / (RC + dT);
 	}
 	if(balance_conf.kd_pt1_highpass_frequency > 0){
 		float dT = 1.0 / balance_conf.hertz;
@@ -319,9 +313,8 @@ static void reset_vars(void){
 	yaw_integral = 0;
 	yaw_last_proportional = 0;
 	d_pt1_lowpass_state = 0;
+	erpm_pt1_lowpass_state = 0;
 	d_pt1_highpass_state = 0;
-	d_pt1_lowpass_state2 = 0;
-	p_pt1_lowpass_state2 = 0;
 	d_pt1_highpass_state = 0;
 	biquad_reset(&d_biquad_lowpass);
 	biquad_reset(&d_biquad_highpass);
@@ -759,8 +752,8 @@ static THD_FUNCTION(balance_thread, arg) {
 				float erpm_accel = vel_erpm - last_vel_erpm;
 				// Apply erpmAccel lpf
 				if(balance_conf.roll_steer_kp > 0){
-					p_pt1_lowpass_state2 = p_pt1_lowpass_state2 + p_pt1_lowpass_k2 * (erpm_accel - p_pt1_lowpass_state2);
-					proportional_erpm = p_pt1_lowpass_state2;
+					erpm_pt1_lowpass_state = erpm_pt1_lowpass_state + erpm_pt1_lowpass_k * (erpm_accel - erpm_pt1_lowpass_state);
+					erpm_accel = erpm_pt1_lowpass_state;
 				}
 				float erpm_accel_scaler;
 				if(balance_conf.yaw_kp > 0){
