@@ -95,7 +95,7 @@ static float tiltback_variable, tiltback_variable_max_erpm, noseangling_step_siz
 
 // Runtime values read from elsewhere
 static float pitch_angle, last_pitch_angle, roll_angle, abs_roll_angle, abs_roll_angle_sin;
-static float gyro[3], accel[3], imu_accel, last_imu_accel;
+static float gyro[3], accel[3];
 static float duty_cycle, abs_duty_cycle;
 static float erpm, abs_erpm, avg_erpm;
 static float motor_current;
@@ -200,9 +200,9 @@ void app_balance_configure(balance_config *conf, imu_config *conf2) {
 		float RC = 1.0 / ( 2.0 * M_PI * balance_conf.kd_pt1_lowpass_frequency);
 		d_pt1_lowpass_k =  dT / (RC + dT);
 	}
-	if(balance_conf.roll_steer_kp > 0){
+	if(balance_conf.yaw_current_clamp > 0){
 		float dT = 1.0 / balance_conf.hertz;
-		float RC = 1.0 / ( 2.0 * M_PI * balance_conf.roll_steer_kp);
+		float RC = 1.0 / ( 2.0 * M_PI * balance_conf.yaw_current_clamp);
 		accel_pt1_lowpass_k =  dT / (RC + dT);
 	}
 	if(balance_conf.kd_pt1_highpass_frequency > 0){
@@ -306,7 +306,6 @@ float app_balance_get_debug2(void) {
 // Internal Functions
 static void reset_vars(void){
 	// Clear accumulated values.
-	imu_accel = 0;
 	integral = 0;
 	last_proportional = 0;
 	yaw_integral = 0;
@@ -655,9 +654,7 @@ static THD_FUNCTION(balance_thread, arg) {
 		abs_roll_angle = fabsf(roll_angle);
 		abs_roll_angle_sin = sinf(DEG2RAD_f(abs_roll_angle));
 		imu_get_gyro(gyro);
-		last_imu_accel = imu_accel;
 		imu_get_accel(accel);
-		imu_accel = accel[0]; // Use x axis for accel
 		duty_cycle = mc_interface_get_duty_cycle_now();
 		abs_duty_cycle = fabsf(duty_cycle);
 		erpm = mc_interface_get_rpm();
@@ -747,15 +744,16 @@ static THD_FUNCTION(balance_thread, arg) {
 				// Primary PID - pitch angle based
 				float angle_pid_value = (balance_conf.kp * proportional) + (balance_conf.ki * integral) + (balance_conf.kd * derivative);
 				
-				// Imu acceleration scaling
-				// Apply accel lpf
-				if(balance_conf.roll_steer_kp > 0){
-					accel_pt1_lowpass_state = accel_pt1_lowpass_state + accel_pt1_lowpass_k * (imu_accel - accel_pt1_lowpass_state);
-					imu_accel = accel_pt1_lowpass_state;
+				// Horizontal acceleration scaling
+				float horizontal_accel = (accel[2] * cosf(90-pitch_angle)) + (accel[0] * cosf(pitch_angle)); // Calculate horizontal acceleration
+				// Apply horizontal accel lpf
+				if(balance_conf.yaw_current_clamp > 0){
+					accel_pt1_lowpass_state = accel_pt1_lowpass_state + accel_pt1_lowpass_k * (horizontal_accel - accel_pt1_lowpass_state);
+					horizontal_accel = accel_pt1_lowpass_state;
 				}
 				float imu_accel_scaler;
-				if(balance_conf.yaw_kp > 0){
-					imu_accel_scaler = powf(balance_conf.yaw_kp, fabsf(imu_accel));
+				if(balance_conf.roll_steer_erpm_kp > 0){
+					imu_accel_scaler = powf(balance_conf.roll_steer_erpm_kp, fabsf(horizontal_accel));
 				}else{
 					imu_accel_scaler = 1;
 				}
