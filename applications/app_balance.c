@@ -106,7 +106,7 @@ static uint32_t imu_data_version = -1;
 
 // Rumtime state values
 static BalanceState state;
-static float proportional, integral, derivative, proportional_erpm, integral_erpm, derivative_erpm;
+static float proportional, integral, derivative;
 static float last_proportional, abs_proportional;
 static float pid_value;
 static float setpoint, setpoint_target, setpoint_target_interpolated;
@@ -120,8 +120,6 @@ static systime_t current_time, last_time, diff_time, loop_overshoot;
 static float filtered_loop_overshoot, loop_overshoot_alpha, filtered_diff_time;
 static systime_t fault_angle_pitch_timer, fault_angle_roll_timer, fault_switch_timer, fault_switch_half_timer, fault_duty_timer;
 static float d_pt1_lowpass_state, d_pt1_lowpass_k, d_pt1_highpass_state, d_pt1_highpass_k;
-static float d_pt1_lowpass_state2, d_pt1_lowpass_k2;
-static float p_pt1_lowpass_state2, p_pt1_lowpass_k2;
 static float accel_pt1_lowpass_state, accel_pt1_lowpass_k;
 static Biquad d_biquad_lowpass, d_biquad_highpass;
 static float motor_timeout;
@@ -206,11 +204,6 @@ void app_balance_configure(balance_config *conf, imu_config *conf2) {
 		float dT = 1.0 / balance_conf.hertz;
 		float RC = 1.0 / ( 2.0 * M_PI * balance_conf.roll_steer_kp);
 		accel_pt1_lowpass_k =  dT / (RC + dT);
-	}
-	if(balance_conf.roll_steer_erpm_kp > 0){
-		float dT = 1.0 / balance_conf.hertz;
-		float RC = 1.0 / ( 2.0 * M_PI * balance_conf.roll_steer_erpm_kp);
-		d_pt1_lowpass_k2 =  dT / (RC + dT);
 	}
 	if(balance_conf.kd_pt1_highpass_frequency > 0){
 		float dT = 1.0 / balance_conf.hertz;
@@ -319,9 +312,7 @@ static void reset_vars(void){
 	yaw_integral = 0;
 	yaw_last_proportional = 0;
 	d_pt1_lowpass_state = 0;
-	d_pt1_highpass_state = 0;
-	d_pt1_lowpass_state2 = 0;
-	p_pt1_lowpass_state2 = 0;
+	accel_pt1_lowpass_state = 0;
 	d_pt1_highpass_state = 0;
 	biquad_reset(&d_biquad_lowpass);
 	biquad_reset(&d_biquad_highpass);
