@@ -95,9 +95,9 @@ static float tiltback_variable, tiltback_variable_max_erpm, noseangling_step_siz
 
 // Runtime values read from elsewhere
 static float pitch_angle, last_pitch_angle, roll_angle, abs_roll_angle, abs_roll_angle_sin;
-static float gyro[3];
+static float gyro[3], accel[3], accel_x, last_accel_x;
 static float duty_cycle, abs_duty_cycle;
-static float erpm, abs_erpm, avg_erpm, vel_erpm, last_vel_erpm;
+static float erpm, abs_erpm, avg_erpm;
 static float motor_current;
 static float motor_position;
 static float adc1, adc2;
@@ -120,8 +120,8 @@ static systime_t current_time, last_time, diff_time, loop_overshoot;
 static float filtered_loop_overshoot, loop_overshoot_alpha, filtered_diff_time;
 static systime_t fault_angle_pitch_timer, fault_angle_roll_timer, fault_switch_timer, fault_switch_half_timer, fault_duty_timer;
 static float d_pt1_lowpass_state, d_pt1_lowpass_k, d_pt1_highpass_state, d_pt1_highpass_k;
-static float d_pt1_lowpass_state2, d_pt1_lowpass_k2; // For ERPM PID loop
-static float p_pt1_lowpass_state2, p_pt1_lowpass_k2; // For ERPM PID loop
+static float d_pt1_lowpass_state2, d_pt1_lowpass_k2;
+static float p_pt1_lowpass_state2, p_pt1_lowpass_k2;
 static Biquad d_biquad_lowpass, d_biquad_highpass;
 static float motor_timeout;
 static systime_t brake_timeout;
@@ -312,9 +312,8 @@ float app_balance_get_debug2(void) {
 // Internal Functions
 static void reset_vars(void){
 	// Clear accumulated values.
-	erpm = 0;
+	accel_x = 0;
 	integral = 0;
-	integral_erpm = 0;
 	last_proportional = 0;
 	yaw_integral = 0;
 	yaw_last_proportional = 0;
@@ -664,11 +663,12 @@ static THD_FUNCTION(balance_thread, arg) {
 		abs_roll_angle = fabsf(roll_angle);
 		abs_roll_angle_sin = sinf(DEG2RAD_f(abs_roll_angle));
 		imu_get_gyro(gyro);
+		last_accel_x = accel_x;
+		imu_get_accel(accel);
+		accel_x = accel[(int)balance_conf.yaw_current_clamp]; // Yaw_current_clamp chooses which axis to use for accel
 		duty_cycle = mc_interface_get_duty_cycle_now();
 		abs_duty_cycle = fabsf(duty_cycle);
-		last_vel_erpm = erpm;
 		erpm = mc_interface_get_rpm();
-		vel_erpm = erpm;
 		abs_erpm = fabsf(erpm);
 		if(balance_conf.multi_esc){
 			avg_erpm = erpm;
@@ -755,20 +755,19 @@ static THD_FUNCTION(balance_thread, arg) {
 				// Primary PID - pitch angle based
 				float angle_pid_value = (balance_conf.kp * proportional) + (balance_conf.ki * integral) + (balance_conf.kd * derivative);
 				
-				// Erpm acceleration scaling
-				float erpm_accel = vel_erpm - last_vel_erpm;
-				// Apply erpmAccel lpf
+				// Imu acceleration scaling
+				// Apply accel lpf
 				if(balance_conf.roll_steer_kp > 0){
-					p_pt1_lowpass_state2 = p_pt1_lowpass_state2 + p_pt1_lowpass_k2 * (erpm_accel - p_pt1_lowpass_state2);
-					proportional_erpm = p_pt1_lowpass_state2;
+					p_pt1_lowpass_state2 = p_pt1_lowpass_state2 + p_pt1_lowpass_k2 * (accel_x - p_pt1_lowpass_state2);
+					accel_x = p_pt1_lowpass_state2;
 				}
-				float erpm_accel_scaler;
+				float imu_accel_scaler;
 				if(balance_conf.yaw_kp > 0){
-					erpm_accel_scaler = powf(balance_conf.yaw_kp, fabsf(erpm_accel));
+					imu_accel_scaler = powf(balance_conf.yaw_kp, fabsf(accel_x));
 				}else{
-					erpm_accel_scaler = 1;
+					imu_accel_scaler = 1;
 				}
-				pid_value = angle_pid_value * erpm_accel_scaler;
+				pid_value = angle_pid_value * imu_accel_scaler;
  
 				last_proportional = proportional;
 
