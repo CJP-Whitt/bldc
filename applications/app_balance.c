@@ -657,7 +657,7 @@ static THD_FUNCTION(balance_thread, arg) {
 		imu_get_gyro(gyro);
 		last_imu_accel = imu_accel;
 		imu_get_accel(accel);
-		imu_accel = accel[(int)balance_conf.yaw_current_clamp]; // Yaw_current_clamp chooses which axis to use for accel
+		imu_accel = accel[0]; // Use x axis for accel
 		duty_cycle = mc_interface_get_duty_cycle_now();
 		abs_duty_cycle = fabsf(duty_cycle);
 		erpm = mc_interface_get_rpm();
