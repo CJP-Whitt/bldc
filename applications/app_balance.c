@@ -95,7 +95,7 @@ static float tiltback_variable, tiltback_variable_max_erpm, noseangling_step_siz
 
 // Runtime values read from elsewhere
 static float pitch_angle, last_pitch_angle, roll_angle, abs_roll_angle, abs_roll_angle_sin;
-static float gyro[3], accel[3], accel_x, last_accel_x;
+static float gyro[3], accel[3], imu_accel, last_imu_accel;
 static float duty_cycle, abs_duty_cycle;
 static float erpm, abs_erpm, avg_erpm;
 static float motor_current;
@@ -122,6 +122,7 @@ static systime_t fault_angle_pitch_timer, fault_angle_roll_timer, fault_switch_t
 static float d_pt1_lowpass_state, d_pt1_lowpass_k, d_pt1_highpass_state, d_pt1_highpass_k;
 static float d_pt1_lowpass_state2, d_pt1_lowpass_k2;
 static float p_pt1_lowpass_state2, p_pt1_lowpass_k2;
+static float accel_pt1_lowpass_state, accel_pt1_lowpass_k;
 static Biquad d_biquad_lowpass, d_biquad_highpass;
 static float motor_timeout;
 static systime_t brake_timeout;
@@ -204,7 +205,7 @@ void app_balance_configure(balance_config *conf, imu_config *conf2) {
 	if(balance_conf.roll_steer_kp > 0){
 		float dT = 1.0 / balance_conf.hertz;
 		float RC = 1.0 / ( 2.0 * M_PI * balance_conf.roll_steer_kp);
-		p_pt1_lowpass_k2 =  dT / (RC + dT);
+		accel_pt1_lowpass_k =  dT / (RC + dT);
 	}
 	if(balance_conf.roll_steer_erpm_kp > 0){
 		float dT = 1.0 / balance_conf.hertz;
@@ -312,7 +313,7 @@ float app_balance_get_debug2(void) {
 // Internal Functions
 static void reset_vars(void){
 	// Clear accumulated values.
-	accel_x = 0;
+	imu_accel = 0;
 	integral = 0;
 	last_proportional = 0;
 	yaw_integral = 0;
@@ -663,9 +664,9 @@ static THD_FUNCTION(balance_thread, arg) {
 		abs_roll_angle = fabsf(roll_angle);
 		abs_roll_angle_sin = sinf(DEG2RAD_f(abs_roll_angle));
 		imu_get_gyro(gyro);
-		last_accel_x = accel_x;
+		last_imu_accel = imu_accel;
 		imu_get_accel(accel);
-		accel_x = accel[(int)balance_conf.yaw_current_clamp]; // Yaw_current_clamp chooses which axis to use for accel
+		imu_accel = accel[(int)balance_conf.yaw_current_clamp]; // Yaw_current_clamp chooses which axis to use for accel
 		duty_cycle = mc_interface_get_duty_cycle_now();
 		abs_duty_cycle = fabsf(duty_cycle);
 		erpm = mc_interface_get_rpm();
@@ -758,12 +759,12 @@ static THD_FUNCTION(balance_thread, arg) {
 				// Imu acceleration scaling
 				// Apply accel lpf
 				if(balance_conf.roll_steer_kp > 0){
-					p_pt1_lowpass_state2 = p_pt1_lowpass_state2 + p_pt1_lowpass_k2 * (accel_x - p_pt1_lowpass_state2);
-					accel_x = p_pt1_lowpass_state2;
+					accel_pt1_lowpass_state = accel_pt1_lowpass_state + accel_pt1_lowpass_k * (imu_accel - accel_pt1_lowpass_state);
+					imu_accel = accel_pt1_lowpass_state;
 				}
 				float imu_accel_scaler;
 				if(balance_conf.yaw_kp > 0){
-					imu_accel_scaler = powf(balance_conf.yaw_kp, fabsf(accel_x));
+					imu_accel_scaler = powf(balance_conf.yaw_kp, fabsf(imu_accel));
 				}else{
 					imu_accel_scaler = 1;
 				}
