@@ -747,38 +747,28 @@ static THD_FUNCTION(balance_thread, arg) {
 				integral = integral + proportional;
 				// TODO: derivative is supposed to scale by dt (loop time). Othewise reducing loop time one also reduces D param proportionally.
 				derivative = last_pitch_angle - pitch_angle;
-
 				// Apply D term filters
 				if(balance_conf.kd_pt1_lowpass_frequency > 0){
 					d_pt1_lowpass_state = d_pt1_lowpass_state + d_pt1_lowpass_k * (derivative - d_pt1_lowpass_state);
 					derivative = d_pt1_lowpass_state;
 				}
-
 				// Primary PID - pitch angle based
 				float angle_pid_value = (balance_conf.kp * proportional) + (balance_conf.ki * integral) + (balance_conf.kd * derivative);
 				
-				//***Secondary PID - erpm based***
-				if(balance_conf.yaw_current_clamp > 0){ // Use reverse erpm
-					vel_erpm = -erpm;
-				} else{
-					vel_erpm = erpm;
-				}
-				// PID Maths
-				proportional_erpm = angle_pid_value - vel_erpm;
-				integral_erpm = integral_erpm + proportional_erpm;
-				derivative_erpm = last_vel_erpm - vel_erpm;
-				// Apply P term filters
+				// Erpm acceleration scaling
+				float erpm_accel = vel_erpm - last_vel_erpm;
+				// Apply erpmAccel lpf
 				if(balance_conf.roll_steer_kp > 0){
-					p_pt1_lowpass_state2 = p_pt1_lowpass_state2 + p_pt1_lowpass_k2 * (proportional_erpm - p_pt1_lowpass_state2);
+					p_pt1_lowpass_state2 = p_pt1_lowpass_state2 + p_pt1_lowpass_k2 * (erpm_accel - p_pt1_lowpass_state2);
 					proportional_erpm = p_pt1_lowpass_state2;
 				}
-				// Apply D term filters
-				if(balance_conf.roll_steer_erpm_kp > 0){
-					d_pt1_lowpass_state2 = d_pt1_lowpass_state2 + d_pt1_lowpass_k2 * (derivative_erpm - d_pt1_lowpass_state2);
-					derivative_erpm = d_pt1_lowpass_state2;
+				float erpm_accel_scaler;
+				if(balance_conf.yaw_kp > 0){
+					erpm_accel_scaler = powf(balance_conf.yaw_kp, fabsf(erpm_accel));
+				}else{
+					erpm_accel_scaler = 1;
 				}
-				float erpm_pid_value =  (balance_conf.yaw_kp * proportional_erpm) + (balance_conf.yaw_ki * integral_erpm) + (balance_conf.yaw_kd * derivative_erpm);
-				pid_value = erpm_pid_value;
+				pid_value = angle_pid_value * erpm_accel_scaler;
  
 				last_proportional = proportional;
 
