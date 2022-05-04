@@ -753,7 +753,8 @@ static THD_FUNCTION(balance_thread, arg) {
 				}
 				float imu_accel_scaler;
 				if(balance_conf.roll_steer_erpm_kp > 0){
-					imu_accel_scaler = powf(balance_conf.roll_steer_erpm_kp, fabsf(horizontal_accel));
+					imu_accel_scaler = -balance_conf.roll_steer_erpm_kp * fabsf(horizontal_accel) + 1; //Linear scaling
+					imu_accel_scaler = (imu_accel_scaler < balance_conf.roll_steer_kp) ? balance_conf.roll_steer_kp : imu_accel_scaler; // Min scaling
 				}else{
 					imu_accel_scaler = 1;
 				}
