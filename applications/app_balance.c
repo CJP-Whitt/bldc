@@ -689,7 +689,7 @@ static THD_FUNCTION(balance_thread, arg) {
 			}
 			avg_erpm = avg_erpm/2;// Assume 2 motors, i don't know how to steer 3 anyways
 		}
-		adc1 = (((float)ADC_Value[ADC_IND_EXT])/4095) * V_REG;
+		adc1 = (((float)ADC_Value[ADC_IND_EXT3])/4095) * V_REG;
 #ifdef ADC_IND_EXT2
 		adc2 = (((float)ADC_Value[ADC_IND_EXT2])/4095) * V_REG;
 #else
