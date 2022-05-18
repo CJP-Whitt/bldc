@@ -579,21 +579,21 @@ static void brake(void){
 	timeout_reset();
 	// Set current
 	mc_interface_set_brake_current(balance_conf.brake_current);
-	if(balance_conf.multi_esc){
+	/*if(balance_conf.multi_esc){
 		for (int i = 0;i < CAN_STATUS_MSGS_TO_STORE;i++) {
 			can_status_msg *msg = comm_can_get_status_msg_index(i);
 			if (msg->id >= 0 && UTILS_AGE_S(msg->rx_time) < MAX_CAN_AGE) {
 				comm_can_set_current_brake(msg->id, balance_conf.brake_current);
 			}
 		}
-	}
+	}*/
 }
 
 static void set_current(float current, float yaw_current){
 	// Reset the timeout
 	timeout_reset();
 	// Set current
-	if(balance_conf.multi_esc){
+	/*if(balance_conf.multi_esc){
 		// Set the current delay
 		mc_interface_set_current_off_delay(motor_timeout);
 		// Set Current
@@ -611,7 +611,12 @@ static void set_current(float current, float yaw_current){
 		mc_interface_set_current_off_delay(motor_timeout);
 		// Set Current
 		mc_interface_set_current(current);
-	}
+	}*/
+
+	// Set the current delay
+	mc_interface_set_current_off_delay(motor_timeout);
+	// Set Current
+	mc_interface_set_current(current);
 }
 
 static THD_FUNCTION(balance_thread, arg) {
@@ -659,7 +664,7 @@ static THD_FUNCTION(balance_thread, arg) {
 		abs_duty_cycle = fabsf(duty_cycle);
 		erpm = mc_interface_get_rpm();
 		abs_erpm = fabsf(erpm);
-		if(balance_conf.multi_esc){
+		/*if(balance_conf.multi_esc){
 			avg_erpm = erpm;
 			for (int i = 0;i < CAN_STATUS_MSGS_TO_STORE;i++) {
 				can_status_msg *msg = comm_can_get_status_msg_index(i);
@@ -668,7 +673,7 @@ static THD_FUNCTION(balance_thread, arg) {
 				}
 			}
 			avg_erpm = avg_erpm/2;// Assume 2 motors, i don't know how to steer 3 anyways
-		}
+		}*/
 		adc1 = (((float)ADC_Value[ADC_IND_EXT])/4095) * V_REG;
 #ifdef ADC_IND_EXT2
 		adc2 = (((float)ADC_Value[ADC_IND_EXT2])/4095) * V_REG;
@@ -744,21 +749,36 @@ static THD_FUNCTION(balance_thread, arg) {
 				// Primary PID - pitch angle based
 				float angle_pid_value = (balance_conf.kp * proportional) + (balance_conf.ki * integral) + (balance_conf.kd * derivative);
 				
-				// Horizontal acceleration scaling
+				/* START - Horizontal acceleration setpoint adjustment
+				    What is this?
+					   > Calculate horizontal acceleration
+					   > Use horizontal accel to offset the setpoint in direction of accel, only go to a max offset
+					   > Params
+					   	   - multi_esc: Setpoint offset polarity
+					   	   - roll_steer_kp: Max setpoint offset (deg)
+						   - roll_steer_erpm_kp: Slope of setpoint mapping (deg / (m/s^2))
+						   - yaw_current_clamp: Horizontal accel lpf (hz)
+						   
+					TODO: Try new filter for accel (exponential, moving avg)| 
+				*/	
 				float horizontal_accel = (accel[2] * cosf(90-pitch_angle)) + (accel[0] * cosf(pitch_angle)); // Calculate horizontal acceleration
-				// Apply horizontal accel lpf
-				if(balance_conf.yaw_current_clamp > 0){
+				
+				if(balance_conf.yaw_current_clamp > 0){ // Apply horizontal accel lpf
 					accel_pt1_lowpass_state = accel_pt1_lowpass_state + accel_pt1_lowpass_k * (horizontal_accel - accel_pt1_lowpass_state);
 					horizontal_accel = accel_pt1_lowpass_state;
 				}
-				float imu_accel_scaler;
+
+				float imu_accel_setpoint_offset;
 				if(balance_conf.roll_steer_erpm_kp > 0){
-					imu_accel_scaler = -balance_conf.roll_steer_erpm_kp * fabsf(horizontal_accel) + 1; //Linear scaling
-					imu_accel_scaler = (imu_accel_scaler < balance_conf.roll_steer_kp) ? balance_conf.roll_steer_kp : imu_accel_scaler; // Min scaling
-				}else{
-					imu_accel_scaler = 1;
+					imu_accel_setpoint_offset = balance_conf.roll_steer_erpm_kp * horizontal_accel; // Linear setpoint offset scaling
+					imu_accel_setpoint_offset = (balance_conf.multi_esc) ? -imu_accel_setpoint_offset : imu_accel_setpoint_offset; // Reverse polarity of setpoint offset if true
+					imu_accel_setpoint_offset = (fabs(imu_accel_setpoint_offset) > balance_conf.roll_steer_kp) ? balance_conf.roll_steer_kp : imu_accel_setpoint_offset; // Max offset check
+					setpoint += imu_accel_setpoint_offset;
 				}
-				pid_value = angle_pid_value * imu_accel_scaler;
+				/* END - Horizontal acceleration setpoint adjustment */
+
+
+				pid_value = angle_pid_value;
  
 				last_proportional = proportional;
 
@@ -773,7 +793,7 @@ static THD_FUNCTION(balance_thread, arg) {
 				}
 
 
-				if(balance_conf.multi_esc){
+				/*if(balance_conf.multi_esc){
 					// Calculate setpoint
 					if(abs_duty_cycle < .02){
 						yaw_setpoint = 0;
@@ -796,7 +816,7 @@ static THD_FUNCTION(balance_thread, arg) {
 					}
 
 					yaw_last_proportional = yaw_proportional;
-				}
+				}*/
 
 				// Output to motor
 				set_current(pid_value, yaw_pid_value);
